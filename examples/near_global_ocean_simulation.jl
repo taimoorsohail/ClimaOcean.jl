@@ -20,6 +20,7 @@ using CairoMakie
 using CFTime
 using Dates
 using Printf
+using Debugger
 
 # ### Grid configuration 
 #
