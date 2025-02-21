@@ -30,8 +30,8 @@ using Debugger
 # The total depth of the domain is set to 6000 meters.
 # Finally, we specify the architecture for the simulation, which in this case is a GPU.
 
-# arch = GPU()
-arch = CPU()
+arch = GPU()
+#arch = CPU()
 
 Nx = 1440
 Ny = 600
