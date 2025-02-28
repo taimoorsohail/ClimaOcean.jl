@@ -77,7 +77,14 @@ nothing #hide
 #
 # We build our ocean model using `ocean_simulation`,
 
-ocean = ocean_simulation(grid)
+
+#eddy_closure = IsopycnalSkewSymmetricDiffusivity(κ_skew=1e3, κ_symmetric=1e3,
+#                                                 skew_flux_formulation=DiffusiveFormulation())
+#vertical_mixing = ClimaOcean.OceanSimulations.default_ocean_closure()
+
+#closure = (eddy_closure, vertical_mixing)
+
+ocean = ocean_simulation(grid)#; closure)
 
 # which uses the default `ocean.model`,
 
@@ -165,6 +172,12 @@ ocean.output_writers[:surface] = JLD2OutputWriter(ocean.model, outputs;
                                                   with_halos = true,
                                                   overwrite_existing = true,
                                                   array_type = Array{Float32})
+prefix = "near_global_"
+ocean.output_writers[:checkpoint] = Checkpointer(ocean.model, 
+                                                 schedule = TimeInterval(50days),
+                                                 overwrite_existing = true,
+                                                 prefix = prefix * "checkpoint")
+
 
 # ### Spinning up the simulation
 #
@@ -172,15 +185,15 @@ ocean.output_writers[:surface] = JLD2OutputWriter(ocean.model, outputs;
 # associated with starting from ECCO2 initial conditions that are both interpolated and also
 # satisfy a different dynamical balance than our simulation.
 
-run!(simulation)
+#run!(simulation)
 
 # ### Running the simulation for real
 
 # After the initial spin up of 10 days, we can increase the time-step and run for longer.
 
-simulation.stop_time = 20days
+simulation.stop_time = 1000days
 simulation.Δt = 10minutes
-run!(simulation)
+run!(simulation, pickup=true)
 
 # ## A pretty movie
 #
