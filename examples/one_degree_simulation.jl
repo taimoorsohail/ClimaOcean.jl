@@ -200,7 +200,7 @@ ocean.output_writers[:zonalavg] = JLD2OutputWriter(ocean.model, za_outputs;
 prefix = "one_deg_tripolar_checkpoint"
 
 ocean.output_writers[:checkpoint] = Checkpointer(ocean.model;
-                                                  schedule = TimeInterval(50days),
+                                                  schedule = TimeInterval(1days),
 						  prefix = prefix,
 						  cleanup = true,
 						  dir = output_dir,
