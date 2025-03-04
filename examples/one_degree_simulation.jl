@@ -22,6 +22,8 @@ arch = GPU()
 
 # ### ECCO files
 
+### TO DO: change to 1990-1991 field
+
 dates = DateTimeProlepticGregorian(1993, 1, 1) : Month(1) : DateTimeProlepticGregorian(1994, 1, 1)
 temperature = ECCOMetadata(:temperature; dates, version=ECCO4Monthly(), dir="./")
 salinity    = ECCOMetadata(:salinity;    dates, version=ECCO4Monthly(), dir="./")
@@ -122,7 +124,9 @@ atmosphere = JRA55PrescribedAtmosphere(arch; backend=JRA55NetCDFBackend(20))
 # flow fields.
 
 coupled_model = OceanSeaIceModel(ocean; atmosphere, radiation)
-simulation = Simulation(coupled_model; Δt=1minutes, stop_time=10days)
+
+#### TO DO: Check the optimal time stepping
+simulation = Simulation(coupled_model; Δt=5minutes, stop_time=5days)
 
 # ### A progress messenger
 #
@@ -136,6 +140,9 @@ function progress(sim)
     T = ocean.model.tracers.T
     Tmax = maximum(interior(T))
     Tmin = minimum(interior(T))
+    S = ocean.model.tracers.S
+    Smax = maximum(interior(S))
+    Smin = minimum(interior(S))
     umax = (maximum(abs, interior(u)),
             maximum(abs, interior(v)),
             maximum(abs, interior(w)))
@@ -145,9 +152,10 @@ function progress(sim)
     msg1 = @sprintf("time: %s, iteration: %d, Δt: %s, ", prettytime(sim), iteration(sim), prettytime(sim.Δt))
     msg2 = @sprintf("max|u|: (%.2e, %.2e, %.2e) m s⁻¹, ", umax...)
     msg3 = @sprintf("extrema(T): (%.2f, %.2f) ᵒC, ", Tmax, Tmin)
-    msg4 = @sprintf("wall time: %s \n", prettytime(step_time))
+    msg4 = @sprintf("extrema(S): (%.2f, %.2f) g/kg, ", Smax, Smin)
+    msg5 = @sprintf("wall time: %s \n", prettytime(step_time))
 
-    @info msg1 * msg2 * msg3 * msg4
+    @info msg1 * msg2 * msg3 * msg4 * msg5
 
      wall_time[] = time_ns()
 
@@ -165,11 +173,37 @@ add_callback!(simulation, progress, IterationInterval(10))
 # Note, that besides temperature and salinity, the CATKE vertical mixing parameterization
 # also uses a prognostic turbulent kinetic energy, `e`, to diagnose the vertical mixing length.
 
-outputs = merge(ocean.model.tracers, ocean.model.velocities)
-ocean.output_writers[:surface] = JLD2OutputWriter(ocean.model, outputs;
-                                                  schedule = TimeInterval(5days),
+surf_outputs = merge(ocean.model.tracers, ocean.model.velocities)
+output_dir = "./"
+ocean.output_writers[:surface] = JLD2OutputWriter(ocean.model, surf_outputs;
+                                                  schedule = TimeInterval(1days),
                                                   filename = "global_surface_fields",
                                                   indices = (:, :, grid.Nz),
+                                                  dir = output_dir,
+                                                  overwrite_existing = true)
+
+za_tracers = Average(ocean.model.tracers, dims = 1)
+za_velocities = Average(ocean.model.velocities, dims = 1)
+za_outputs = merge(za_tracers, za_velocities)
+
+ocean.output_writers[:zonalavg] = JLD2OutputWriter(ocean.model, za_outputs;
+                                                  schedule = TimeInterval(1days),
+                                                  filename = "global_zonal_avg_fields",
+                                                  indices = (:, :),
+                                                  dir = output_dir,
+                                                  overwrite_existing = true)
+
+## TO DO: Add tracers cumulatively depth integrated OHC(z,t) and OSC(z,t), and in temperature space as well
+
+# We also save a Checkpointer to be able to pick up the simulation from a later point
+
+prefix = "one_deg_tripolar_checkpoint"
+
+ocean.output_writers[:checkpoint] = Checkpointer(ocean.model;
+                                                  schedule = TimeInterval(1days),
+                                                  prefix = prefix,
+                                                  cleanup = true,
+                                                  dir = output_dir,
                                                   overwrite_existing = true)
 
 # ### Ready to run
@@ -179,12 +213,20 @@ ocean.output_writers[:surface] = JLD2OutputWriter(ocean.model, outputs;
 # After we run for a short time (here we set up the simulation with `stop_time = 10days`),
 # we increase the timestep and run for longer.
 
-run!(simulation)
+# We check if a checkpointer already exists - if not, we can run the initial start up
+checkpoint_file = output_dir*prefix*"*"
+println(checkpoint_file)
+if isfile(checkpoint_file)
+    # If checkpoint exists, load the simulation state
+    println("Checkpoint found, resuming the simulation from the checkpoint.")
+    simulation.Δt = 20minutes
+    simulation.stop_time = 360days
 
-simulation.Δt = 20minutes
-simulation.stop_time = 360days
-
-run!(simulation)
+    run!(simulation, pickup=true)
+else
+    println("Checkpoint not found, spinning up simulation from scratch."
+        run!(simulation)
+End
 
 # ### A pretty movie
 #
